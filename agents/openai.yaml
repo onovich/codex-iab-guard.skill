@@ -1,0 +1,4 @@
+interface:
+  display_name: "CodexIABGuard"
+  short_description: "Contain the Codex IAB GPU-to-MSIX failure chain"
+  default_prompt: "Use $codex-iab-guard to contain this Windows IAB GPU/MSIX failure and choose a safe task handoff."
