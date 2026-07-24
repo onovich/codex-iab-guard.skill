@@ -1,73 +1,65 @@
 # CodexIABGuard
 
-CodexIABGuard is a signature-specific containment skill for a Codex Desktop for Windows failure chain: restored in-app browser state triggers a Chromium GPU failure, followed by AppX/MSIX package remediation symptoms that can leave Codex unable to launch.
-<br/>**CodexIABGuard 是一个针对特定故障链的阻断 Skill：Codex Desktop for Windows 恢复内置浏览器状态后触发 Chromium GPU 故障，继而出现 AppX/MSIX 软件包修复异常，严重时会导致 Codex 无法启动。**
+[English](README.md) | [简体中文](README.zh-CN.md)
 
-It is a cautious mitigation and handoff aid, not a universal crash fixer or a guaranteed permanent repair.
-<br/>**它是一套谨慎的临时阻断与任务交接方案，并不是通用闪退修复器，也不保证永久修好问题。**
+A safety-first, Windows-focused containment and recovery aid for one Codex Desktop failure chain:
 
-## Scope
+- restored or active in-app Browser state followed by a Chromium GPU crash and relaunch failure, optionally with Code Integrity Event 3033 for `vk_swiftshader.dll`;
+- AppX/MSIX package state then becoming `Modified` or `NeedsRemediation`, returning `0x3CFC` / `0x80073CFC`, or leaving Codex unable to launch.
 
-The skill requires evidence from both sides of the known chain before treating an incident as a match:
-<br/>**只有同时找到这条已知故障链两端的证据，Skill 才会把事件判定为匹配：**
+CodexIABGuard diagnoses first and asks before changing persisted browser state. It is an independent community mitigation, not an official OpenAI fix, and it cannot guarantee permanent recovery.
 
-- An in-app-browser/GPU signal, such as a restored browser task, `reason=crashed` followed by `reason=launch-failed`, or Code Integrity Event 3033 involving `vk_swiftshader.dll`.
-  <br/>**内置浏览器/GPU 信号，例如恢复了带浏览器状态的任务、先出现 `reason=crashed` 再出现 `reason=launch-failed`，或代码完整性事件 3033 指向 `vk_swiftshader.dll`。**
-- An AppX/MSIX signal, such as `Modified`, `NeedsRemediation`, `appxState=2`, `0x3CFC`, `0x80073CFC`, container destruction, or Codex becoming unlaunchable.
-  <br/>**AppX/MSIX 信号，例如 `Modified`、`NeedsRemediation`、`appxState=2`、`0x3CFC`、`0x80073CFC`、应用容器被销毁，或 Codex 变得无法启动。**
+## Quick start
 
-A firewall permission dialog by itself, or an unrelated generic Codex crash, is not enough to match this skill.
-<br/>**只出现防火墙授权弹窗，或只发生一次无关的普通 Codex 闪退，都不足以匹配这个 Skill。**
-
-## What It Does
-
-- Collects read-only package-health and event evidence without intentionally reproducing the dangerous browser action.
-  <br/>**以只读方式收集软件包健康状态和系统事件证据，不主动复现危险的浏览器动作。**
-- Preserves the task history and, only with explicit approval while Codex is fully closed, backs up and quarantines the exact task's persisted in-app-browser tab state.
-  <br/>**保留任务历史；仅在用户明确同意且 Codex 已完全退出时，备份并隔离指定任务所保存的内置浏览器标签状态。**
-- Helps decide whether to resume the original task, make a clean handoff to a new task, or repair/reinstall the Codex package first.
-  <br/>**帮助判断应该恢复原任务、交接到新任务，还是先修复或重装 Codex 软件包。**
-- Instructs the resumed task not to repeat the risky browser action and to return URLs for the user to open manually.
-  <br/>**要求恢复后的任务不要重复危险的浏览器动作，只提供网址，由用户手动打开。**
-
-## Install
-
-Clone the repository into the Codex skills directory from PowerShell:
-<br/>**在 PowerShell 中把仓库克隆到 Codex 的 Skills 目录：**
+Clone the skill into your Codex skills directory:
 
 ```powershell
-git clone https://github.com/onovich/codex-iab-guard.skill.git "$env:USERPROFILE\.codex\skills\codex-iab-guard"
+git clone https://github.com/onovich/codex-iab-guard.skill.git `
+  "$env:USERPROFILE\.codex\skills\codex-iab-guard"
 ```
 
-Restart Codex, then invoke `$codex-iab-guard` or select `CodexIABGuard` from the skill picker.
-<br/>**重启 Codex，然后调用 `$codex-iab-guard`，或从 Skill 选择器中选择 `CodexIABGuard`。**
+Restart Codex, then run:
 
-## Safety Boundaries
+```text
+$codex-iab-guard Diagnose this incident. Ask before changing any persisted browser state.
+```
 
-The workflow does not modify `WindowsApps`, the registry, firewall rules, security policy, or Code Integrity settings. It does not delete task history and does not silently mutate browser state.
-<br/>**这套流程不会修改 `WindowsApps`、注册表、防火墙规则、安全策略或代码完整性设置；不会删除任务历史，也不会静默修改浏览器状态。**
+## What it does
 
-If the signature does not match, the skill stops and routes the incident to normal crash diagnosis instead of applying its quarantine procedure.
-<br/>**如果故障特征不匹配，Skill 会停止专用隔离流程，并把问题转交给普通闪退诊断。**
+1. Takes one bounded, read-only snapshot of current package health and recent relevant Windows events.
+2. Requires evidence from both the in-app-browser/GPU side and the AppX/MSIX side; a generic crash or firewall prompt alone is rejected.
+3. Identifies one suspect task without reopening its browser UI or reproducing the dangerous page.
+4. With explicit approval and Codex fully closed, backs up local state and quarantines only that task's `thread-browser-tabs-v1:<task-id>` key.
+5. Preserves task history and recommends one outcome: continue under a no-browser guardrail, make a clean handoff, or repair the Codex package first.
 
-## Related Reports
+A successful quarantine may stop the affected task from automatically restoring the dangerous tab. It does not prove that the underlying Codex defect is fixed or that another task cannot encounter it.
 
-- [#34133 — GPU process crash / launch failure and Code Integrity 3033](https://github.com/openai/codex/issues/34133)
-  <br/>**[#34133——GPU 进程崩溃/启动失败与代码完整性事件 3033](https://github.com/openai/codex/issues/34133)**
-- [#27828 — Cloudflare Turnstile in-app-browser crash and reinstall recovery](https://github.com/openai/codex/issues/27828)
-  <br/>**[#27828——Cloudflare Turnstile 触发内置浏览器崩溃，重装后恢复](https://github.com/openai/codex/issues/27828)**
-- [#32094 — Related GPU/AppX container failure chain](https://github.com/openai/codex/issues/32094)
-  <br/>**[#32094——相关的 GPU/AppX 应用容器故障链](https://github.com/openai/codex/issues/32094)**
-- [#35132 — Same family reported on a later Codex build; closed as a duplicate of #34133](https://github.com/openai/codex/issues/35132)
-  <br/>**[#35132——较新 Codex 版本上的同类报告；已作为 #34133 的重复问题关闭](https://github.com/openai/codex/issues/35132)**
+## Safety
 
-## Repository Contents
+- Never live-reproduces a suspect URL, Cloudflare challenge, screenshot, canvas, WebGL, WebCodecs, Browser Use, Chrome-control, or computer-use action.
+- Never deletes a task, task history, the whole `.codex` directory, or the whole global-state file.
+- Never edits `WindowsApps`, AppX ACLs, package registry state, firewall rules, Code Integrity policy, or GPU security policy.
+- Requires explicit approval before browser-state quarantine or official Store repair/reinstall.
+- Backs up and validates state before replacement, supports rollback, and redacts task IDs, paths, project names, prompts, and private URLs from public reports.
 
-- `SKILL.md` — routing, evidence gate, containment workflow, and safety rules.
-  <br/>**`SKILL.md`——路由条件、证据门槛、阻断流程和安全规则。**
-- `scripts/codex-iab-gpu-msix-health-check.ps1` — read-only Windows health and incident checker.
-  <br/>**`scripts/codex-iab-gpu-msix-health-check.ps1`——只读的 Windows 健康状态与事故检查脚本。**
-- `scripts/quarantine-thread-browser-state.ps1` — targeted backup, quarantine, verification, and rollback helper.
-  <br/>**`scripts/quarantine-thread-browser-state.ps1`——针对指定任务的备份、隔离、验证与回滚工具。**
-- `references/` — incident signatures and a redacted reporting template.
-  <br/>**`references/`——故障特征说明和已脱敏的报告模板。**
+## Time and version scope
+
+Last reviewed: 2026-07-25
+
+The local Windows reproduction affected Codex Desktop `26.721.3404.0`; Store reinstall restored launchability with `26.721.3996.0` on Windows 11 build `10.0.26200`. Related public reports cover other environments and include the same failure family on `26.721.3996.0`. This is an observed range, not a compatibility guarantee.
+
+Check the latest upstream status before using the skill:
+
+- GPU crash, relaunch failure, and Code Integrity Event 3033: [openai/codex#34133](https://github.com/openai/codex/issues/34133);
+- Cloudflare Turnstile in-app-browser crash followed by an unlaunchable app: [openai/codex#27828](https://github.com/openai/codex/issues/27828);
+- related GPU/AppX-container failure chain: [openai/codex#32094](https://github.com/openai/codex/issues/32094);
+- sidebar browser use followed by `Modified` / `NeedsRemediation`: [openai/codex#34311](https://github.com/openai/codex/issues/34311);
+- later-build report closed as a duplicate of #34133: [openai/codex#35132](https://github.com/openai/codex/issues/35132).
+
+On newer builds, diagnose before taking action. Stop using the quarantine workaround when the linked issues are fixed and the same symptoms no longer occur.
+
+## Not covered
+
+CodexIABGuard is not a general Codex or Windows crash fixer. A generic silent exit, browser timeout, unrelated launch failure, or firewall-consent dialog without matching GPU and AppX/MSIX evidence is outside its scope.
+
+The skill cannot patch the closed-source Codex Desktop application, prove an unobserved root cause, or guarantee a permanent repair. When its two-sided signature is absent, it refuses browser-state quarantine and routes the incident to normal crash diagnosis.
